@@ -1,0 +1,143 @@
+# .github/workflows/deploy.yml
+name: Deploy to Minikube
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  DOCKER_REGISTRY: localhost:5000
+  KUBECONFIG: ${{ github.workspace }}/.kube/config
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          cd backend && npm ci
+          cd ../web-dashboard && npm ci
+
+      - name: Run tests
+        run: |
+          cd backend && npm test
+          cd ../web-dashboard && npm test
+
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Start minikube
+        uses: medyagh/setup-minikube@master
+        with:
+          minikube-version: 1.32.0
+          kubernetes-version: 1.28.0
+
+      - name: Enable registry addon
+        run: |
+          minikube addons enable registry
+          kubectl port-forward --namespace kube-system service/registry 5000:80 &
+
+      - name: Build Docker images
+        run: |
+          # 백엔드 이미지 빌드
+          docker build -t $DOCKER_REGISTRY/nestjs-backend:${{ github.sha }} ./backend
+          docker build -t $DOCKER_REGISTRY/nestjs-backend:latest ./backend
+
+          # 웹 대시보드 이미지 빌드
+          docker build -t $DOCKER_REGISTRY/web-dashboard:${{ github.sha }} ./web-dashboard
+          docker build -t $DOCKER_REGISTRY/web-dashboard:latest ./web-dashboard
+
+      - name: Push to registry
+        run: |
+          docker push $DOCKER_REGISTRY/nestjs-backend:${{ github.sha }}
+          docker push $DOCKER_REGISTRY/nestjs-backend:latest
+          docker push $DOCKER_REGISTRY/web-dashboard:${{ github.sha }}
+          docker push $DOCKER_REGISTRY/web-dashboard:latest
+
+      - name: Deploy to Kubernetes
+        run: |
+          # 네임스페이스, 시크릿, 서비스, 인그레스 적용
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/secrets.yaml
+          kubectl apply -f k8s/backend-service.yaml
+          kubectl apply -f k8s/web-dashboard-service.yaml
+          kubectl apply -f k8s/ingress.yaml
+
+          # Deployment 적용
+          kubectl apply -f k8s/backend-deployment.yaml
+          kubectl apply -f k8s/web-dashboard-deployment.yaml
+
+      - name: Update image to new version
+        run: |
+          kubectl set image deployment/nestjs-backend nestjs-backend=$DOCKER_REGISTRY/nestjs-backend:${{ github.sha }} -n app-deployment
+          kubectl set image deployment/web-dashboard web-dashboard=$DOCKER_REGISTRY/web-dashboard:${{ github.sha }} -n app-deployment
+
+      - name: Wait for rollout to complete
+        run: |
+          # 배포 상태 확인
+          kubectl rollout status deployment/nestjs-backend -n app-deployment
+          kubectl rollout status deployment/web-dashboard -n app-deployment
+
+      - name: Update app version
+        run: |
+          # 백엔드에 새 버전 정보 업데이트
+          kubectl exec -n app-deployment deployment/nestjs-backend -- \
+            curl -X POST http://localhost:3000/api/version/update \
+            -H "Content-Type: application/json" \
+            -d '{"version": "${{ github.sha }}", "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+
+      - name: Trigger app update notification
+        run: |
+          # React Native 앱들에게 업데이트 알림 전송
+          kubectl exec -n app-deployment deployment/nestjs-backend -- \
+            curl -X POST http://localhost:3000/api/push-notification/update \
+            -H "Content-Type: application/json" \
+            -d '{"message": "New version available", "forceUpdate": false}'
+
+  deploy-react-native:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: |
+          cd mobile-app && npm ci
+
+      - name: CodePush deployment
+        run: |
+          cd mobile-app
+          npx appcenter codepush release-react \
+            --app YourOrg/YourApp-iOS \
+            --deployment-name Production \
+            --description "Auto deployment from commit ${{ github.sha }}"
+
+          npx appcenter codepush release-react \
+            --app YourOrg/YourApp-Android \
+            --deployment-name Production \
+            --description "Auto deployment from commit ${{ github.sha }}"
+        env:
+          APPCENTER_ACCESS_TOKEN: ${{ secrets.APPCENTER_ACCESS_TOKEN }}

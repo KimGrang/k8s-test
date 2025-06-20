@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-dashboard
+  namespace: app-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web-dashboard
+  template:
+    metadata:
+      labels:
+        app: web-dashboard
+    spec:
+      containers:
+        - name: web-dashboard
+          image: localhost:5000/web-dashboard:latest
+          ports:
+            - containerPort: 80

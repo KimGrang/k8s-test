@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:13
+    container_name: k8s-test-db-local
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: k8s-test-backend-local
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      # 로컬 개발 시 사용할 데이터베이스 연결 정보입니다.
+      # 실제 로컬 환경에 맞게 수정해주세요.
+      - DATABASE_URL=postgresql://user:password@db:5432/mydb?schema=public
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  web-dashboard:
+    build:
+      context: ./web-dashboard
+      dockerfile: Dockerfile
+      args:
+        # React 앱은 사용자의 브라우저에서 실행되므로,
+        # 브라우저가 접근할 수 있는 localhost 주소를 사용해야 합니다.
+        REACT_APP_API_URL: http://localhost:3000
+    container_name: k8s-test-dashboard-local
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  postgres-data:

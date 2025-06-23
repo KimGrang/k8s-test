@@ -6,9 +6,20 @@ describe('VersionController', () => {
   let controller: VersionController;
 
   beforeEach(async () => {
+    const mockVersionService = {
+      // VersionService의 메서드들을 mock으로 정의
+      getVersion: jest.fn(),
+      updateVersion: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VersionController],
-      providers: [VersionService],
+      providers: [
+        {
+          provide: VersionService,
+          useValue: mockVersionService,
+        },
+      ],
     }).compile();
 
     controller = module.get<VersionController>(VersionController);

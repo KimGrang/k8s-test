@@ -15,8 +15,9 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHealth()).toBe('Hello World!');
+    it('should return health status', () => {
+      // 실제 반환값에 맞게 수정
+      expect(appController.getHealth()).toEqual({ status: 'ok' });
     });
   });
 });

@@ -167,7 +167,7 @@ main() {
             check_requirements
             start_minikube
             setup_registry
-            update_hosts
+            # update_hosts
             build_images
             deploy_to_k8s
             show_urls

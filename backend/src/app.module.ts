@@ -4,9 +4,12 @@ import { AppService } from './app.service';
 import { VersionModule } from './version/version.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+// import { PushNotificationModule } from './push-notification/push-notification.module';
 
 @Module({
   imports: [
+    VersionModule,
+    // PushNotificationModule,
     ConfigModule.forRoot({
       isGlobal: true,
     }),
@@ -18,9 +21,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         url: configService.get<string>('DATABASE_URL'),
         autoLoadEntities: true,
         synchronize: true,
+        logging: true,
       }),
     }),
-    VersionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

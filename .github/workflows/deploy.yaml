@@ -22,6 +22,9 @@ jobs:
         with:
           node-version: "18"
           cache: "npm"
+          cache-dependency-path: |
+            backend/package-lock.json
+            web-dashboard/package-lock.json
 
       - name: Install dependencies
         run: |
@@ -108,36 +111,3 @@ jobs:
       #       curl -X POST http://localhost:3000/api/push-notification/update \
       #       -H "Content-Type: application/json" \
       #       -d '{"message": "New version available", "forceUpdate": false}'
-
-  # deploy-react-native:
-  #   needs: build-and-deploy
-  #   runs-on: ubuntu-latest
-  #   if: github.ref == 'refs/heads/main'
-  #
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v3
-  #       with:
-  #         node-version: "18"
-  #         cache: "npm"
-  #
-  #     - name: Install dependencies
-  #       run: |
-  #         cd mobile-app && npm ci
-  #
-  #     - name: CodePush deployment
-  #       run: |
-  #         cd mobile-app
-  #         npx appcenter codepush release-react \
-  #           --app YourOrg/YourApp-iOS \
-  #           --deployment-name Production \
-  #           --description "Auto deployment from commit ${{ github.sha }}"
-  #
-  #         npx appcenter codepush release-react \
-  #           --app YourOrg/YourApp-Android \
-  #           --deployment-name Production \
-  #           --description "Auto deployment from commit ${{ github.sha }}"
-  #       env:
-  #         APPCENTER_ACCESS_TOKEN: ${{ secrets.APPCENTER_ACCESS_TOKEN }}

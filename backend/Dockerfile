@@ -24,6 +24,9 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
+# curl 설치
+RUN apk add --no-cache curl
+
 # 보안을 위한 non-root 사용자 생성
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nestjs -u 1001

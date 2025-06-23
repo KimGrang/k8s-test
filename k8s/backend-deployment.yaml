@@ -15,7 +15,8 @@ spec:
     spec:
       containers:
         - name: nestjs-backend
-          image: localhost:5000/nestjs-backend:latest
+          image: nestjs-backend:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
           env:
@@ -36,5 +37,5 @@ spec:
             httpGet:
               path: /health
               port: 3000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 30
             periodSeconds: 5

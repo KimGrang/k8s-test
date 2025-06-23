@@ -15,6 +15,7 @@ spec:
     spec:
       containers:
         - name: web-dashboard
-          image: localhost:5000/web-dashboard:latest
+          image: web-dashboard:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

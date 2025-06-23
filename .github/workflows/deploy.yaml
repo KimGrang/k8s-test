@@ -8,7 +8,6 @@ on:
     branches: [main]
 
 env:
-  DOCKER_REGISTRY: localhost:5000
   KUBECONFIG: ${{ github.workspace }}/.kube/config
 
 jobs:
@@ -20,11 +19,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "18"
+          node-version: "20"
           cache: "npm"
-          cache-dependency-path: |
-            backend/package-lock.json
-            web-dashboard/package-lock.json
+          cache-dependency-path: "**/package-lock.json"
 
       - name: Install dependencies
         run: |
@@ -50,30 +47,26 @@ jobs:
           minikube-version: 1.32.0
           kubernetes-version: 1.28.0
 
-      - name: Enable registry addon
+      - name: Build Docker images inside Minikube
         run: |
-          minikube addons enable registry
-          kubectl port-forward --namespace kube-system service/registry 5000:80 &
+          # Minikube Docker 환경 설정
+          eval $(minikube -p minikube docker-env)
 
-      - name: Build Docker images
-        run: |
           # 백엔드 이미지 빌드
-          docker build -t $DOCKER_REGISTRY/nestjs-backend:${{ github.sha }} ./backend
-          docker build -t $DOCKER_REGISTRY/nestjs-backend:latest ./backend
+          echo "Building backend image..."
+          docker build -t nestjs-backend:${{ github.sha }} -t nestjs-backend:latest ./backend
 
           # 웹 대시보드 이미지 빌드
-          docker build -t $DOCKER_REGISTRY/web-dashboard:${{ github.sha }} ./web-dashboard
-          docker build -t $DOCKER_REGISTRY/web-dashboard:latest ./web-dashboard
+          echo "Building web-dashboard image..."
+          docker build -t web-dashboard:${{ github.sha }} -t web-dashboard:latest ./web-dashboard
 
-      - name: Push to registry
-        run: |
-          docker push $DOCKER_REGISTRY/nestjs-backend:${{ github.sha }}
-          docker push $DOCKER_REGISTRY/nestjs-backend:latest
-          docker push $DOCKER_REGISTRY/web-dashboard:${{ github.sha }}
-          docker push $DOCKER_REGISTRY/web-dashboard:latest
+          # 빌드된 이미지 확인
+          echo "Built images:"
+          docker images | grep -E "(nestjs-backend|web-dashboard)"
 
       - name: Deploy to Kubernetes
         run: |
+          echo "Applying Kubernetes manifests..."
           # 네임스페이스, 시크릿, 서비스, 인그레스 적용
           kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/secrets.yaml
@@ -87,22 +80,46 @@ jobs:
 
       - name: Update image to new version
         run: |
-          kubectl set image deployment/nestjs-backend nestjs-backend=$DOCKER_REGISTRY/nestjs-backend:${{ github.sha }} -n app-deployment
-          kubectl set image deployment/web-dashboard web-dashboard=$DOCKER_REGISTRY/web-dashboard:${{ github.sha }} -n app-deployment
+          echo "Updating deployments with new images..."
+          kubectl set image deployment/nestjs-backend nestjs-backend=nestjs-backend:${{ github.sha }} -n app-deployment
+          kubectl set image deployment/web-dashboard web-dashboard=web-dashboard:${{ github.sha }} -n app-deployment
 
       - name: Wait for rollout to complete
         run: |
+          echo "Waiting for deployments to complete..."
           # 배포 상태 확인
-          kubectl rollout status deployment/nestjs-backend -n app-deployment
-          kubectl rollout status deployment/web-dashboard -n app-deployment
+          kubectl rollout status deployment/nestjs-backend -n app-deployment --timeout=300s
+          kubectl rollout status deployment/web-dashboard -n app-deployment --timeout=300s
+
+          # Pod 상태 확인
+          kubectl get pods -n app-deployment
 
       - name: Update app version
         run: |
+          echo "Updating app version..."
+          # 백엔드가 준비될 때까지 잠시 대기
+          sleep 10
+
           # 백엔드에 새 버전 정보 업데이트
           kubectl exec -n app-deployment deployment/nestjs-backend -- \
             curl -X POST http://localhost:3000/api/version/update \
             -H "Content-Type: application/json" \
             -d '{"version": "${{ github.sha }}", "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+
+      - name: Deployment summary
+        run: |
+          echo "=== Deployment Summary ==="
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Deployed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo ""
+          echo "Services:"
+          kubectl get services -n app-deployment
+          echo ""
+          echo "Deployments:"
+          kubectl get deployments -n app-deployment
+          echo ""
+          echo "Pods:"
+          kubectl get pods -n app-deployment
 
       # - name: Trigger app update notification
       #   run: |

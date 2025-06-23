@@ -1,130 +1,167 @@
-# .github/workflows/deploy.yml
-name: Deploy to Minikube
+# # .github/workflows/deploy.yml
+# name: Deploy to Minikube
 
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+# on:
+#   push:
+#     branches: [main, develop]
+#   pull_request:
+#     branches: [main]
 
-env:
-  KUBECONFIG: ${{ github.workspace }}/.kube/config
+# env:
+#   KUBECONFIG: ${{ github.workspace }}/.kube/config
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+# jobs:
+#   test:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "**/package-lock.json"
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v3
+#         with:
+#           node-version: "20"
+#           cache: "npm"
+#           cache-dependency-path: "**/package-lock.json"
 
-      - name: Install dependencies
-        run: |
-          cd backend && npm ci
-          cd ../web-dashboard && npm ci
+#       - name: Install dependencies
+#         run: |
+#           cd backend && npm ci
+#           cd ../web-dashboard && npm ci
 
-      - name: Run tests
-        run: |
-          cd backend && npm test
-          cd ../web-dashboard && npm test
+#       - name: Run tests
+#         run: |
+#           cd backend && npm test
+#           cd ../web-dashboard && npm test
 
-  build-and-deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+#   build-and-deploy:
+#     needs: test
+#     runs-on: ubuntu-latest
+#     if: github.ref == 'refs/heads/main'
 
-    steps:
-      - uses: actions/checkout@v3
+#     steps:
+#       - uses: actions/checkout@v3
 
-      - name: Start minikube
-        uses: medyagh/setup-minikube@master
-        with:
-          minikube-version: 1.32.0
-          kubernetes-version: 1.28.0
+#       - name: Start minikube
+#         uses: medyagh/setup-minikube@master
+#         with:
+#           minikube-version: 1.32.0
+#           kubernetes-version: 1.28.0
 
-      - name: Build Docker images inside Minikube
-        run: |
-          # Minikube Docker 환경 설정
-          eval $(minikube -p minikube docker-env)
+#       - name: Build Docker images inside Minikube
+#         run: |
+#           # Minikube Docker 환경 설정
+#           eval $(minikube -p minikube docker-env)
 
-          # 백엔드 이미지 빌드
-          echo "Building backend image..."
-          docker build -t nestjs-backend:${{ github.sha }} -t nestjs-backend:latest ./backend
+#           # 백엔드 이미지 빌드
+#           echo "Building backend image..."
+#           docker build -t nestjs-backend:${{ github.sha }} -t nestjs-backend:latest ./backend
 
-          # 웹 대시보드 이미지 빌드
-          echo "Building web-dashboard image..."
-          docker build -t web-dashboard:${{ github.sha }} -t web-dashboard:latest ./web-dashboard
+#           # 웹 대시보드 이미지 빌드
+#           echo "Building web-dashboard image..."
+#           docker build -t web-dashboard:${{ github.sha }} -t web-dashboard:latest ./web-dashboard
 
-          # 빌드된 이미지 확인
-          echo "Built images:"
-          docker images | grep -E "(nestjs-backend|web-dashboard)"
+#           # 빌드된 이미지 확인
+#           echo "Built images:"
+#           docker images | grep -E "(nestjs-backend|web-dashboard)"
 
-      - name: Deploy to Kubernetes
-        run: |
-          echo "Applying Kubernetes manifests..."
-          # 네임스페이스, 시크릿, 서비스, 인그레스 적용
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/secrets.yaml
-          kubectl apply -f k8s/backend-service.yaml
-          kubectl apply -f k8s/web-dashboard-service.yaml
-          kubectl apply -f k8s/ingress.yaml
+#       - name: Deploy to Kubernetes
+#         run: |
+#           echo "Applying Kubernetes manifests..."
+#           # 네임스페이스, 시크릿, 서비스, 인그레스 적용
+#           kubectl apply -f k8s/namespace.yaml
+#           kubectl apply -f k8s/secrets.yaml
+#           kubectl apply -f k8s/backend-service.yaml
+#           kubectl apply -f k8s/web-dashboard-service.yaml
+#           kubectl apply -f k8s/ingress.yaml
 
-          # Deployment 적용
-          kubectl apply -f k8s/backend-deployment.yaml
-          kubectl apply -f k8s/web-dashboard-deployment.yaml
+#           # Deployment 적용
+#           kubectl apply -f k8s/backend-deployment.yaml
+#           kubectl apply -f k8s/web-dashboard-deployment.yaml
 
-      - name: Update image to new version
-        run: |
-          echo "Updating deployments with new images..."
-          kubectl set image deployment/nestjs-backend nestjs-backend=nestjs-backend:${{ github.sha }} -n app-deployment
-          kubectl set image deployment/web-dashboard web-dashboard=web-dashboard:${{ github.sha }} -n app-deployment
+#       - name: Update image to new version
+#         run: |
+#           echo "Updating deployments with new images..."
+#           kubectl set image deployment/nestjs-backend nestjs-backend=nestjs-backend:${{ github.sha }} -n app-deployment
+#           kubectl set image deployment/web-dashboard web-dashboard=web-dashboard:${{ github.sha }} -n app-deployment
 
-      - name: Wait for rollout to complete
-        run: |
-          echo "Waiting for deployments to complete..."
-          # 배포 상태 확인
-          kubectl rollout status deployment/nestjs-backend -n app-deployment --timeout=300s
-          kubectl rollout status deployment/web-dashboard -n app-deployment --timeout=300s
+#       - name: Wait for rollout to complete
+#         run: |
+#           echo "Waiting for deployments to complete..."
+#           # 배포 상태 확인
+#           kubectl rollout status deployment/nestjs-backend -n app-deployment --timeout=300s
+#           kubectl rollout status deployment/web-dashboard -n app-deployment --timeout=300s
 
-          # Pod 상태 확인
-          kubectl get pods -n app-deployment
+#           # Pod 상태 확인
+#           kubectl get pods -n app-deployment
 
-      - name: Update app version
-        run: |
-          echo "Updating app version..."
-          # 백엔드가 준비될 때까지 잠시 대기
-          sleep 10
+#       - name: Update app version
+#         run: |
+#           echo "Updating app version..."
+#           # 백엔드가 준비될 때까지 잠시 대기
+#           sleep 10
 
-          # 백엔드에 새 버전 정보 업데이트
-          kubectl exec -n app-deployment deployment/nestjs-backend -- \
-            curl -X POST http://localhost:3000/api/version/update \
-            -H "Content-Type: application/json" \
-            -d '{"version": "${{ github.sha }}", "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
+#           # 백엔드에 새 버전 정보 업데이트
+#           kubectl exec -n app-deployment deployment/nestjs-backend -- \
+#             curl -X POST http://localhost:3000/api/version/update \
+#             -H "Content-Type: application/json" \
+#             -d '{"version": "${{ github.sha }}", "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
 
-      - name: Deployment summary
-        run: |
-          echo "=== Deployment Summary ==="
-          echo "Commit SHA: ${{ github.sha }}"
-          echo "Deployed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          echo ""
-          echo "Services:"
-          kubectl get services -n app-deployment
-          echo ""
-          echo "Deployments:"
-          kubectl get deployments -n app-deployment
-          echo ""
-          echo "Pods:"
-          kubectl get pods -n app-deployment
+#       - name: Deployment summary
+#         run: |
+#           echo "=== Deployment Summary ==="
+#           echo "Commit SHA: ${{ github.sha }}"
+#           echo "Deployed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+#           echo ""
+#           echo "Services:"
+#           kubectl get services -n app-deployment
+#           echo ""
+#           echo "Deployments:"
+#           kubectl get deployments -n app-deployment
+#           echo ""
+#           echo "Pods:"
+#           kubectl get pods -n app-deployment
 
-      # - name: Trigger app update notification
-      #   run: |
-      #     # React Native 앱들에게 업데이트 알림 전송
-      #     kubectl exec -n app-deployment deployment/nestjs-backend -- \
-      #       curl -X POST http://localhost:3000/api/push-notification/update \
-      #       -H "Content-Type: application/json" \
-      #       -d '{"message": "New version available", "forceUpdate": false}'
+#       # - name: Trigger app update notification
+#       #   run: |
+#       #     # React Native 앱들에게 업데이트 알림 전송
+#       #     kubectl exec -n app-deployment deployment/nestjs-backend -- \
+#       #       curl -X POST http://localhost:3000/api/push-notification/update \
+#       #       -H "Content-Type: application/json" \
+#       #       -d '{"message": "New version available", "forceUpdate": false}'
+- name: 롤아웃 완료 대기
+  run: |
+    echo "배포 완료 대기 중..."
+
+    # 현재 상태 먼저 확인
+    echo "=== 현재 배포 상태 ==="
+    kubectl get deployments -n app-deployment
+    kubectl get pods -n app-deployment -o wide
+
+    echo "=== 최근 이벤트 ==="
+    kubectl get events -n app-deployment --sort-by='.lastTimestamp' | tail -10
+
+    # 확장된 타임아웃으로 롤아웃 대기
+    echo "=== 롤아웃 상태 확인 시작 ==="
+
+    # 백엔드 롤아웃
+    echo "nestjs-backend 롤아웃 확인 중..."
+    if ! kubectl rollout status deployment/nestjs-backend -n app-deployment --timeout=600s; then
+      echo "백엔드 롤아웃 실패, 디버그 정보 수집 중..."
+      kubectl describe deployment/nestjs-backend -n app-deployment
+      kubectl get pods -n app-deployment -l app=nestjs-backend
+      kubectl logs -n app-deployment -l app=nestjs-backend --tail=100 || true
+      exit 1
+    fi
+
+    # 웹 대시보드 롤아웃
+    echo "web-dashboard 롤아웃 확인 중..."
+    if ! kubectl rollout status deployment/web-dashboard -n app-deployment --timeout=600s; then
+      echo "웹 대시보드 롤아웃 실패, 디버그 정보 수집 중..."
+      kubectl describe deployment/web-dashboard -n app-deployment
+      kubectl get pods -n app-deployment -l app=web-dashboard
+      kubectl logs -n app-deployment -l app=web-dashboard --tail=100 || true
+      exit 1
+    fi
+
+    echo "=== 최종 Pod 상태 ==="
+    kubectl get pods -n app-deployment

@@ -102,14 +102,21 @@ jobs:
       - name: Deploy to Kubernetes
         run: |
           echo "Applying Kubernetes manifests..."
-          # 네임스페이스, 시크릿, 서비스, 인그레스 적용
+          # 네임스페이스, 시크릿 적용
           kubectl apply -f k8s/namespace.yaml
           kubectl apply -f k8s/secrets.yaml
+
+          # Postgres 배포 및 서비스 적용
+          kubectl apply -f k8s/postgres-deployment.yaml
+          kubectl apply -f k8s/postgres-service.yaml
+
+          # Postgres 파드가 Running 될 때까지 대기
+          kubectl rollout status deployment/postgres -n app-deployment --timeout=120s
+
+          # 백엔드/프론트엔드 서비스, 인그레스, 디플로이먼트 적용
           kubectl apply -f k8s/backend-service.yaml
           kubectl apply -f k8s/web-dashboard-service.yaml
           kubectl apply -f k8s/ingress.yaml
-
-          # Deployment 적용
           kubectl apply -f k8s/backend-deployment.yaml
           kubectl apply -f k8s/web-dashboard-deployment.yaml
 
@@ -142,7 +149,7 @@ jobs:
             -d '{"version": "${{ github.sha }}", "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
 
       - name: Deployment summary
-        run: |
+         run: |
           echo "=== Deployment Summary ==="
           echo "Commit SHA: ${{ github.sha }}"
           echo "Deployed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -155,6 +162,9 @@ jobs:
           echo ""
           echo "Pods:"
           kubectl get pods -n app-deployment
+          echo ""
+          echo "Postgres:"
+          kubectl get pods -l app=postgres -n app-deployment
 
       # - name: Trigger app update notification
       #   run: |

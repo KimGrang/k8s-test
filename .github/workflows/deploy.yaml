@@ -149,7 +149,7 @@ jobs:
             -d '{"version": "${{ github.sha }}", "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}'
 
       - name: Deployment summary
-         run: |
+        run: |
           echo "=== Deployment Summary ==="
           echo "Commit SHA: ${{ github.sha }}"
           echo "Deployed at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"

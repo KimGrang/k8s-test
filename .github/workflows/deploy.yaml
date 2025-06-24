@@ -3,39 +3,41 @@ name: Deploy to Minikube
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop] # 두 브랜치 모두 트리거
   pull_request:
-    branches: [main]
+    branches: [main] # main 브랜치로의 PR만
 
 env:
-  KUBECONFIG: ${{ github.workspace }}/.kube/config
+  KUBECONFIG: ${{ github.workspace }}/.kube/config # 쿠버네티스 클러스터 설정 파일 경로
 
+# 테스트 작업
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # 테스트 환경 설정 : latest ubuntu
     services:
       postgres:
-        image: postgres:13-alpine
+        image: postgres:13-alpine # 테스트 환경 설정 : postgres 13 alpine
         env:
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: mydb
+          POSTGRES_USER: user # 테스트 환경 설정 : postgres 사용자 이름
+          POSTGRES_PASSWORD: password # 테스트 환경 설정 : postgres 비밀번호
+          POSTGRES_DB: mydb # 테스트 환경 설정 : postgres 데이터베이스 이름
         ports:
-          - 5432:5432
+          - 5432:5432 # DB 컨테이너 포트 5432를 호스트 포트 5432에 매핑
+        # 테스트 환경 설정 : postgres 상태 확인 명령어, 간격, 시간 초과, 실패 횟수
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3 # 체크아웃 액션 사용
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "**/package-lock.json"
+          node-version: "20" # 테스트 환경 설정 : node 20
+          cache: "npm" # 테스트 환경 설정 : npm 캐시 사용
+          cache-dependency-path: "**/package-lock.json" # 테스트 환경 설정 : package-lock.json 캐시 사용
 
       - name: Install dependencies
         env:
@@ -51,6 +53,7 @@ jobs:
           cd backend && npm test
           cd ../web-dashboard && npm test
 
+  # 빌드 및 배포 작업
   build-and-deploy:
     needs: test
     runs-on: ubuntu-latest
@@ -76,8 +79,8 @@ jobs:
       - name: Start minikube
         uses: medyagh/setup-minikube@master
         with:
-          minikube-version: 1.32.0
-          kubernetes-version: 1.28.0
+          minikube-version: 1.32.0 # 빌드 환경 설정 : minikube 1.32.0
+          kubernetes-version: 1.28.0 # 빌드 환경 설정 : kubernetes 1.28.0
 
       - name: Build Docker images inside Minikube
         run: |
